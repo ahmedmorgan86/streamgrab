@@ -138,8 +138,10 @@ function renderFormats(type) {
       const safeSize    = escHtmlStr(size);
       const isPreferred = prefFormat !== 'mp4' && f.ext === prefFormat;
 
+      // لو الـ format فيه URL مباشر (زي Threads) نستخدمه كـ format_id
+      const dlFormatId = f.url ? encodeURIComponent(f.url) : f.format_id;
       grid.insertAdjacentHTML('beforeend', `
-        <div class="frow ${best ? 'best' : ''}" onclick="startDownload('${f.format_id}','video','${escHtml(f.ext)}','${escHtml(label)}')">
+        <div class="frow ${best ? 'best' : ''}" onclick="startDownload('${dlFormatId}','video','${escHtml(f.ext)}','${escHtml(label)}')">
           <div>
             <div class="fn">
               ${best ? '<span class="best-chip">الأفضل</span>' : ''}
@@ -150,7 +152,7 @@ function renderFormats(type) {
           </div>
           <div class="fres">${resolution}</div>
           <div class="fsz">${safeSize}</div>
-          <button class="dlbtn" title="تحميل" onclick="event.stopPropagation();startDownload('${f.format_id}','video','${escHtml(f.ext)}','${escHtml(label)}')">
+          <button class="dlbtn" title="تحميل" onclick="event.stopPropagation();startDownload('${dlFormatId}','video','${escHtml(f.ext)}','${escHtml(label)}')">
             ${dlIcon()}
           </button>
         </div>`);

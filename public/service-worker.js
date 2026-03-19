@@ -1,4 +1,4 @@
-// StreamGrab Service Worker v2.0 — Ahmed Morgan
+// StreamGrab Service Worker v2.1 — Ahmed Morgan
 const CACHE_NAME    = 'streamgrab-v2';
 const STATIC_ASSETS = [
   '/',
@@ -29,6 +29,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // تجاهل أي scheme غير http/https (chrome-extension, moz-extension, إلخ)
+  if (!event.request.url.startsWith('http')) return;
+
   // API calls — Network Only
   if (['/info', '/download', '/get-file', '/health'].some(p => url.pathname.startsWith(p))) {
     event.respondWith(
@@ -46,7 +49,12 @@ self.addEventListener('fetch', (event) => {
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
       return fetch(event.request).then((response) => {
-        if (response.ok && event.request.method === 'GET') {
+        // فقط كاش الـ GET requests من نفس الـ origin
+        if (
+          response.ok &&
+          event.request.method === 'GET' &&
+          event.request.url.startsWith(self.location.origin)
+        ) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
@@ -54,11 +62,4 @@ self.addEventListener('fetch', (event) => {
       });
     })
   );
-});
-
-// Background Sync placeholder
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'streamgrab-sync') {
-    console.log('[SW] Background sync triggered');
-  }
 });

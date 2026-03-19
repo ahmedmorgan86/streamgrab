@@ -4,6 +4,7 @@ const { exec }   = require('child_process');
 const path       = require('path');
 const fs         = require('fs');
 const rateLimit  = require('express-rate-limit');
+const { getThreadsInfo } = require('./threads_handler');
 
 const app = express();
 app.use(cors());
@@ -69,14 +70,46 @@ function isSafeTmpPath(filePath) {
   return resolved.startsWith('/tmp/') && !resolved.includes('..');
 }
 
+
+// ── Extra yt-dlp flags per domain ─────────────────────────────────────────
+function getExtraFlags(rawUrl) {
+  try {
+    const host = new URL(rawUrl).hostname.replace(/^www\./, '');
+    if (host === 'threads.com' || host === 'threads.net') {
+      // Threads محتاج User-Agent خاص وبيشتغل عبر Instagram extractor
+      return [
+        '--add-header', '"User-Agent:Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"',
+        '--add-header', '"Accept-Language:en-US,en;q=0.9"',
+        '--extractor-args', '"instagram:api_page_id=threads"',
+      ].join(' ');
+    }
+    if (host === 'instagram.com') {
+      return '--add-header "User-Agent:Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"';
+    }
+  } catch {}
+  return '';
+}
+
 // ── GET /info ──────────────────────────────────────────────────────────────
-app.get('/info', (req, res) => {
+app.get('/info', async (req, res) => {
   const { url } = req.query;
   if (!url)               return res.status(400).json({ error: 'URL مطلوب' });
   if (!isAllowedUrl(url)) return res.status(400).json({ error: 'هذا الموقع غير مدعوم أو غير مسموح به' });
 
+  // ── Threads: handler مخصص ──────────────────────────────────────────────
+  const urlHost = new URL(url).hostname.replace(/^www\./, '');
+  if (urlHost === 'threads.com' || urlHost === 'threads.net') {
+    try {
+      const threadsData = await getThreadsInfo(url);
+      return res.json(threadsData);
+    } catch (err) {
+      return res.status(500).json({ error: 'فشل تحميل الرابط من Threads', detail: err.message });
+    }
+  }
+
   const safeUrl = JSON.stringify(url);
-  const cmd = `yt-dlp --dump-json --no-playlist --no-check-certificates ${safeUrl}`;
+  const extraFlags = getExtraFlags(url);
+  const cmd = `yt-dlp --dump-json --no-playlist --no-check-certificates ${extraFlags} ${safeUrl}`;
 
   exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
     if (err) return res.status(500).json({ error: 'فشل تحليل الرابط', detail: stderr.slice(0, 300) });
@@ -121,6 +154,53 @@ app.get('/download-progress', (req, res) => {
   if (!isAllowedUrl(url))  return res.status(400).end();
   if (!/^[\w\+\-\.]+$/.test(format_id)) return res.status(400).end();
 
+  // ── Threads: تحميل مباشر بدون yt-dlp ────────────────────────────────────
+  const dlHost = new URL(url).hostname.replace(/^www\./, '');
+  if (dlHost === 'threads.com' || dlHost === 'threads.net') {
+    // format_id هنا هو URL المشفّر للفيديو المباشر
+    const videoUrl = decodeURIComponent(format_id);
+    const safeName2 = sanitizeFilename(filename);
+    const outFile2  = path.join(TMP, `${Date.now()}_${safeName2}.mp4`);
+    const https     = require('https');
+
+    res.setHeader('Content-Type',  'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection',    'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.flushHeaders();
+
+    const send2 = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    send2({ status: 'downloading', percent: 10, speed: '', eta: '' });
+
+    const file2 = require('fs').createWriteStream(outFile2);
+    https.get(videoUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+        'Referer': 'https://www.threads.com/',
+      }
+    }, (resp) => {
+      const total = parseInt(resp.headers['content-length'] || '0', 10);
+      let downloaded = 0;
+      resp.on('data', chunk => {
+        downloaded += chunk.length;
+        if (total > 0) {
+          const pct = Math.min(Math.round((downloaded / total) * 99), 99);
+          send2({ status: 'downloading', percent: pct, speed: '', eta: '' });
+        }
+      });
+      resp.pipe(file2);
+      file2.on('finish', () => {
+        send2({ status: 'done', percent: 100, file: outFile2, filename: `${safeName2}.mp4` });
+        setTimeout(() => { try { if (require('fs').existsSync(outFile2)) require('fs').unlinkSync(outFile2); } catch {} }, 5 * 60 * 1000);
+        res.end();
+      });
+    }).on('error', (e) => {
+      send2({ status: 'error', message: 'فشل تحميل الفيديو: ' + e.message });
+      res.end();
+    });
+    return;
+  }
+
   res.setHeader('Content-Type',  'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection',    'keep-alive');
@@ -139,10 +219,12 @@ app.get('/download-progress', (req, res) => {
   if (type === 'audio') {
     const quality = parseInt(format_id, 10);
     if (![128, 192, 256, 320].includes(quality)) return res.status(400).end();
-    cmd = `yt-dlp -x --audio-format mp3 --audio-quality ${quality}k --newline --no-check-certificates -o ${safeOut} ${safeUrl}`;
+    const ef = getExtraFlags(url);
+    cmd = `yt-dlp -x --audio-format mp3 --audio-quality ${quality}k --newline --no-check-certificates ${ef} -o ${safeOut} ${safeUrl}`;
   } else {
     const safeFmt = JSON.stringify(`${format_id}+bestaudio[ext=m4a]/best[ext=mp4]/best`);
-    cmd = `yt-dlp -f ${safeFmt} --merge-output-format mp4 --newline --no-check-certificates -o ${safeOut} ${safeUrl}`;
+    const ef2 = getExtraFlags(url);
+    cmd = `yt-dlp -f ${safeFmt} --merge-output-format mp4 --newline --no-check-certificates ${ef2} -o ${safeOut} ${safeUrl}`;
   }
 
   const proc = exec(cmd);
