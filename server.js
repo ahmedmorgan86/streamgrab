@@ -13,6 +13,27 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const TMP = '/tmp';
 
+// ── Video URL Cache (للـ Threads وغيره من الروابط المباشرة) ───────────────
+const videoUrlCache = new Map();
+function cacheVideoUrl(url) {
+  const id = 'vid_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  videoUrlCache.set(id, { url, expires: Date.now() + 10 * 60 * 1000 }); // 10 دقايق
+  return id;
+}
+function getCachedUrl(id) {
+  const entry = videoUrlCache.get(id);
+  if (!entry) return null;
+  if (Date.now() > entry.expires) { videoUrlCache.delete(id); return null; }
+  return entry.url;
+}
+// نظّف الـ cache كل 5 دقايق
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of videoUrlCache) {
+    if (now > v.expires) videoUrlCache.delete(k);
+  }
+}, 5 * 60 * 1000);
+
 // ── Rate Limiting ──────────────────────────────────────────────────────────
 const limiter = rateLimit({
   windowMs: 60 * 1000,
@@ -101,6 +122,14 @@ app.get('/info', async (req, res) => {
   if (urlHost === 'threads.com' || urlHost === 'threads.net') {
     try {
       const threadsData = await getThreadsInfo(url);
+      // حوّل الـ _directUrl لـ cached ID عشان URL قصير
+      threadsData.formats = threadsData.formats.map(f => {
+        if (f._directUrl) {
+          const cachedId = cacheVideoUrl(f._directUrl);
+          return { ...f, format_id: cachedId, _directUrl: undefined };
+        }
+        return f;
+      });
       return res.json(threadsData);
     } catch (err) {
       console.error('[Threads Error]', err.message, err.stack);
@@ -162,11 +191,11 @@ app.get('/download-progress', (req, res) => {
   if (!isAllowedUrl(url))  return res.status(400).end();
   if (!/^[\w\+\-\.]+$/.test(format_id)) return res.status(400).end();
 
-  // ── Threads: تحميل مباشر بدون yt-dlp ────────────────────────────────────
+  // ── Threads / Direct URL: تحميل من cache ────────────────────────────────
   const dlHost = new URL(url).hostname.replace(/^www\./, '');
-  if (dlHost === 'threads.com' || dlHost === 'threads.net') {
-    // format_id هنا هو URL المشفّر للفيديو المباشر
-    const videoUrl = decodeURIComponent(format_id);
+  const cachedVideoUrl = getCachedUrl(format_id);
+  if (dlHost === 'threads.com' || dlHost === 'threads.net' || cachedVideoUrl) {
+    const videoUrl = cachedVideoUrl || decodeURIComponent(format_id);
     const safeName2 = sanitizeFilename(filename);
     const outFile2  = path.join(TMP, `${Date.now()}_${safeName2}.mp4`);
     const https     = require('https');

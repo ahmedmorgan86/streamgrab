@@ -169,13 +169,14 @@ async function getThreadsInfo(url) {
   try {
     const { videoUrls, title, thumbnail, uploader } = await tryEmbed(shortcode);
     const formats = videoUrls.map((u, i) => ({
-      format_id:  encodeURIComponent(u),
+      format_id:  String(i),
       ext:        'mp4',
       resolution: i === 0 ? '1080x1920' : '720x1280',
       height:     i === 0 ? 1080 : 720,
       width:      i === 0 ? 608  : 405,
       filesize:   null, vcodec: 'avc1', acodec: 'mp4a',
       tbr:        null, fps: 30, type: 'video', url: u,
+      _directUrl: u,
     }));
     return { id: mediaId, title, thumbnail, duration: null, uploader, view_count: null, upload_date: '', formats };
   } catch (e) { errors.push('Embed: ' + e.message); }
@@ -193,6 +194,7 @@ async function getThreadsInfo(url) {
         tbr: f.tbr || null, abr: f.abr || null,
         height: f.height || null,
         type: f.vcodec === 'none' ? 'audio' : 'video',
+        _directUrl: f.url || null,
       })).sort((a, b) => (b.tbr || 0) - (a.tbr || 0));
     return {
       id: data.id, title: data.title, thumbnail: data.thumbnail,
