@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StreamGrab — حمِّل أي فيديو</title>
+
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#00e5ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StreamGrab">
+
+<!-- Icons -->
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="144x144" href="/icons/icon-144.png">
+
+<!-- SEO -->
+<meta name="description" content="حمِّل أي فيديو أو صوت من يوتيوب وتيك توك وأكثر من ١٠٠٠ موقع بأعلى جودة ممكنة">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="hd">
+  <a class="logo" href="#" onclick="showPage('home');return false;">
+    <div class="logo-icon">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <path d="M9 2v10M5 8l4 5 4-5M3 15h12" stroke="#080810" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="logo-txt">Stream<span class="logo-dot">Grab</span></span>
+  </a>
+
+  <nav class="nav" id="desktopNav">
+    <button class="nav-a on" data-page="home"     onclick="showPage('home')">تحميل</button>
+    <button class="nav-a"    data-page="history"  onclick="showPage('history')">السجل</button>
+    <button class="nav-a"    data-page="settings" onclick="showPage('settings')">الإعدادات</button>
+  </nav>
+
+  <button class="burger" id="burgerBtn" onclick="toggleMenu()" aria-label="القائمة">
+    <span></span><span></span><span></span>
+  </button>
+</header>
+
+<!-- Mobile Drawer -->
+<div class="drawer" id="drawer">
+  <button class="drawer-item on" data-page="home"     onclick="showPage('home');closeMenu()">🏠 الرئيسية</button>
+  <button class="drawer-item"    data-page="history"  onclick="showPage('history');closeMenu()">📋 السجل</button>
+  <button class="drawer-item"    data-page="settings" onclick="showPage('settings');closeMenu()">⚙️ الإعدادات</button>
+  <div class="drawer-divider"></div>
+  <button class="drawer-item"   onclick="showPage('about');closeMenu()">ℹ️ عن التطبيق</button>
+  <button class="drawer-item"   onclick="showPage('help');closeMenu()">❓ المساعدة</button>
+</div>
+<div class="overlay" id="overlay" onclick="closeMenu()"></div>
+
+<!-- PAGE: HOME -->
+<div class="page on" id="page-home">
+  <section class="hero">
+    <div class="pill"><span class="pill-dot"></span>يدعم أكثر من ١٠٠٠ منصة</div>
+    <h1 class="h1">حمِّل أي فيديو<br><span class="hl">بأعلى جودة</span></h1>
+    <p class="sub">من يوتيوب إلى تيك توك وThreads — فيديو أو صوت، بأي صيغة وأي دقة تريدها، مجاناً وبدون تسجيل</p>
+
+    <div class="input-card">
+      <input class="url-in" id="urlIn" type="url" placeholder="الصق رابط الفيديو هنا..."/>
+      <button class="go" onclick="analyze()">تحليل</button>
+    </div>
+
+    <div class="load-wrap" id="loadWrap">
+      <div class="load-bar"><div class="load-fill" id="loadFill"></div></div>
+      <div class="load-txt" id="loadTxt">جاري تحليل الرابط...</div>
+    </div>
+
+    <div class="plats">
+      <span class="plat">YouTube</span>
+      <span class="plat">TikTok</span>
+      <span class="plat">Instagram</span>
+      <span class="plat threads-plat">Threads</span>
+      <span class="plat">Facebook</span>
+      <span class="plat">Twitter / X</span>
+      <span class="plat">Vimeo</span>
+      <span class="plat">Twitch</span>
+      <span class="plat">+ ٩٩٢ موقع</span>
+    </div>
+  </section>
+
+  <div class="results" id="results">
+    <div class="vmeta">
+      <div class="thumb">
+        <img id="vthumb" src="" alt="" style="display:none;">
+        <div class="play-ov"><div>▶</div></div>
+      </div>
+      <div class="vinfo">
+        <div class="vtitle" id="vtitle">—</div>
+        <div class="vmetas">
+          <span class="vm">👁 <span id="vviews">—</span></span>
+          <span class="vm">⏱ <span id="vduration">—</span></span>
+          <span class="vm">🎬 <span id="vuploader">—</span></span>
+        </div>
+        <div class="qbadges" id="qbadges"></div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab on" data-type="video" onclick="switchTab('video',this)">🎬 فيديو</button>
+      <button class="tab"    data-type="audio" onclick="switchTab('audio',this)">🎵 صوت فقط</button>
+    </div>
+
+    <div class="fmts">
+      <div class="fhd">
+        <span>الصيغة والجودة</span>
+        <span class="hide-xs">الدقة</span>
+        <span class="hide-sm">الحجم التقريبي</span>
+        <span></span>
+      </div>
+      <div id="fmtGrid"></div>
+    </div>
+
+    <div class="dl-prog" id="dlProg">
+      <div class="dp-top">
+        <span class="dp-lbl" id="dpLbl">جاري التحميل...</span>
+        <span class="dp-pct" id="dpPct">0%</span>
+      </div>
+      <div class="dp-bar"><div class="dp-fill" id="dpFill"></div></div>
+      <div class="dp-meta">
+        <span id="dpSpeed"></span>
+        <span id="dpEta"></span>
+      </div>
+      <div class="dp-done" id="dpDone">✓ اكتمل التحميل بنجاح — سيبدأ التنزيل تلقائياً</div>
+    </div>
+  </div>
+<!--
+  <div class="stats">
+    <div class="sc"><div class="sc-num" id="s1">0M+</div><div class="sc-lbl">فيديو تم تحميله</div></div>
+    <div class="sc"><div class="sc-num" id="s2">0+</div><div class="sc-lbl">موقع مدعوم</div></div>
+    <div class="sc"><div class="sc-num" id="s3">0K+</div><div class="sc-lbl">مستخدم نشط يومياً</div></div>
+  </div>
+-->
+  <div class="feats">
+    <div class="fc-card">
+      <div class="fc-icon ic1">⚡</div>
+      <div class="fc-t">تحميل فائق السرعة</div>
+      <div class="fc-d">تقنية التحميل المتوازي باستخدام yt-dlp وffmpeg لأسرع تجربة تحميل ممكنة</div>
+    </div>
+    <div class="fc-card">
+      <div class="fc-icon ic2">🎯</div>
+      <div class="fc-t">جودة تصل إلى 4K وHDR</div>
+      <div class="fc-d">دعم كامل لأعلى دقات الفيديو المتاحة مع الحفاظ على جودة الصوت الأصلية</div>
+    </div>
+    <div class="fc-card">
+      <div class="fc-icon ic3">🛡️</div>
+      <div class="fc-t">خصوصية تامة ١٠٠٪</div>
+      <div class="fc-d">لا نحتفظ بأي بيانات أو سجلات. ملفاتك تُحذف تلقائياً بعد اكتمال التحميل</div>
+    </div>
+    <div class="fc-card">
+      <div class="fc-icon ic4">🌐</div>
+      <div class="fc-t">أكثر من ١٠٠٠ موقع</div>
+      <div class="fc-d">يوتيوب · تيك توك · إنستغرام · Threads · فيسبوك · تويتر وأكثر من ألف منصة أخرى</div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: HISTORY -->
+<div class="page" id="page-history">
+  <div class="inner-page">
+    <div class="page-head">
+      <h2 class="page-title">سجل التحميلات</h2>
+      <p class="page-sub">آخر الملفات التي قمت بتحميلها في هذه الجلسة</p>
+    </div>
+
+    <div class="history-empty" id="historyEmpty">
+      <div class="empty-icon">📂</div>
+      <div class="empty-t">لا يوجد سجل بعد</div>
+      <div class="empty-d">ابدأ بتحميل أول فيديو وسيظهر هنا</div>
+      <button class="btn-cyan" onclick="showPage('home')">ابدأ التحميل ←</button>
+    </div>
+
+    <div class="history-list" id="historyList" style="display:none;"></div>
+
+    <div class="history-note">
+      <span>💾</span>
+      <span>السجل محفوظ على متصفحك ويبقى بين الجلسات — الملفات لا تُخزَّن على خوادمنا</span>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: SETTINGS -->
+<div class="page" id="page-settings">
+  <div class="inner-page">
+    <div class="page-head">
+      <h2 class="page-title">الإعدادات</h2>
+      <p class="page-sub">خصِّص تجربة التحميل حسب احتياجاتك</p>
+    </div>
+
+    <div class="settings-grid">
+      <div class="setting-section">
+        <div class="setting-section-title">إعدادات الفيديو</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">الجودة المفضلة</div>
+            <div class="setting-desc">الجودة الافتراضية عند تحليل أي رابط</div>
+          </div>
+          <select class="setting-select" id="prefQuality" onchange="saveSetting('prefQuality',this.value)">
+            <option value="best">الأفضل المتاحة</option>
+            <option value="2160">4K Ultra HD</option>
+            <option value="1080">1080p Full HD</option>
+            <option value="720">720p HD</option>
+            <option value="480">480p SD</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">صيغة الفيديو</div>
+            <div class="setting-desc">الصيغة المفضلة للتحميل</div>
+          </div>
+          <select class="setting-select" id="prefFormat" onchange="saveSetting('prefFormat',this.value)">
+            <option value="mp4">MP4 (موصى به)</option>
+            <option value="webm">WebM</option>
+            <option value="mkv">MKV</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="setting-section">
+        <div class="setting-section-title">إعدادات الصوت</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">جودة الصوت الافتراضية</div>
+            <div class="setting-desc">عند اختيار تحميل الصوت فقط</div>
+          </div>
+          <select class="setting-select" id="prefAudio" onchange="saveSetting('prefAudio',this.value)">
+            <option value="320">320 كيلوبت/ث — الأعلى جودة</option>
+            <option value="256">256 كيلوبت/ث — جودة عالية</option>
+            <option value="192">192 كيلوبت/ث — جودة جيدة</option>
+            <option value="128">128 كيلوبت/ث — حجم صغير</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="setting-section">
+        <div class="setting-section-title">إعدادات الواجهة</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">مسح السجل تلقائياً</div>
+            <div class="setting-desc">مسح سجل التحميلات عند إغلاق المتصفح</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="autoClear" checked onchange="saveSetting('autoClear',this.checked)">
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="setting-section">
+        <div class="setting-section-title">إجراءات</div>
+        <div class="settings-actions">
+          <button class="btn-outline" onclick="clearHistory()">🗑️ مسح سجل التحميلات</button>
+          <button class="btn-outline danger" onclick="resetSettings()">↺ إعادة الضبط الافتراضي</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: ABOUT -->
+<div class="page" id="page-about">
+  <div class="inner-page">
+    <div class="page-head">
+      <h2 class="page-title">عن StreamGrab</h2>
+      <p class="page-sub">أداة تحميل فيديو مجانية ومفتوحة المصدر</p>
+    </div>
+    <div class="about-grid">
+      <div class="about-card big">
+        <div class="about-logo-big">
+          <div class="logo-icon-big">⬇</div>
+          <div>
+            <div class="about-name">StreamGrab</div>
+            <div class="about-ver">الإصدار 2.0.0</div>
+          </div>
+        </div>
+        <p class="about-desc">StreamGrab هي أداة تحميل فيديو مجانية ومفتوحة المصدر مبنية على yt-dlp وNode.js، من تطوير <strong>Ahmed Morgan</strong>. تدعم أكثر من ١٠٠٠ موقع بما فيها Threads وتتيح تحميل الفيديو والصوت بأعلى جودة ممكنة بشكل سريع وآمن.</p>
+      </div>
+      <div class="about-card">
+        <div class="about-card-icon">🛠️</div>
+        <div class="about-card-t">التقنيات المستخدمة</div>
+        <div class="tech-list">
+          <span class="tech-tag">yt-dlp</span>
+          <span class="tech-tag">Node.js</span>
+          <span class="tech-tag">Express.js</span>
+          <span class="tech-tag">ffmpeg</span>
+          <span class="tech-tag">SSE</span>
+          <span class="tech-tag">HTML5</span>
+          <span class="tech-tag">CSS3</span>
+        </div>
+      </div>
+      <div class="about-card">
+        <div class="about-card-icon">⚖️</div>
+        <div class="about-card-t">الاستخدام القانوني</div>
+        <p class="about-card-d">هذه الأداة مخصصة للاستخدام الشخصي فقط. يُرجى احترام حقوق الملكية الفكرية وعدم تحميل محتوى محمي بحقوق النشر بدون إذن صاحبه.</p>
+      </div>
+      <div class="about-card">
+        <div class="about-card-icon">🔒</div>
+        <div class="about-card-t">الخصوصية</div>
+        <p class="about-card-d">لا نجمع أي بيانات شخصية. الروابط تُعالَج فقط لجلب معلومات الفيديو وتُحذف فوراً. ملفاتك لا تُخزَّن على خوادمنا أبداً.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: HELP -->
+<div class="page" id="page-help">
+  <div class="inner-page">
+    <div class="page-head">
+      <h2 class="page-title">المساعدة والدعم</h2>
+      <p class="page-sub">إجابات على الأسئلة الشائعة</p>
+    </div>
+
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>كيف أستخدم StreamGrab؟</span><span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-a">
+          <p>الأمر بسيط جداً: انسخ رابط الفيديو من أي موقع مدعوم، الصقه في خانة البحث، ثم اضغط "تحليل". بعد ثوانٍ ستظهر جميع الصيغ والجودات المتاحة، اختر ما يناسبك واضغط زر التحميل.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>ما هي المواقع المدعومة؟</span><span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-a">
+          <p>تدعم الأداة أكثر من ١٠٠٠ موقع أبرزها: YouTube، TikTok، Instagram، Threads، Facebook، Twitter/X، Vimeo، Twitch، Dailymotion، SoundCloud وغيرها الكثير.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>لماذا لا يعمل الرابط؟</span><span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-a">
+          <p>قد يكون السبب: الفيديو خاص أو محذوف · الموقع غير مدعوم · الفيديو محمي بـ DRM مثل Netflix وDisney+ · الرابط منتهي الصلاحية. تأكد من أن الفيديو متاح للعموم.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>ما الفرق بين صيغ الفيديو؟</span><span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-a">
+          <p><strong>MP4:</strong> الأكثر توافقاً مع جميع الأجهزة، موصى به للاستخدام العام.<br>
+          <strong>WebM:</strong> حجم أصغر مع جودة مماثلة، مناسب للمتصفحات.<br>
+          <strong>MKV:</strong> يدعم تعدد المسارات الصوتية والترجمات.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>هل التحميل آمن وخاص؟</span><span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-a">
+          <p>نعم تماماً. لا نجمع أي بيانات شخصية ولا نخزن الروابط أو الملفات. كل عملية تحميل تُعالَج مؤقتاً ثم تُحذف تلقائياً خلال دقائق.</p>
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" onclick="toggleFaq(this)">
+          <span>ما أعلى جودة يمكن تحميلها؟</span><span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-a">
+          <p>تعتمد الجودة على ما يوفره الموقع الأصلي. يدعم StreamGrab تحميل الفيديو حتى 4K Ultra HD وHDR و60fps إذا كانت المنصة توفرها.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="help-contact">
+      <div class="help-contact-t">هل لديك مشكلة أخرى؟</div>
+      <div class="help-contact-d">تأكد أولاً من تحديث yt-dlp بتشغيل الأمر <code>pip install -U yt-dlp</code> لأن بعض المواقع تتغير باستمرار.</div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="ft">
+  <div class="ft-top">
+    <div class="ft-brand">
+      <span class="logo-txt" style="font-size:16px;">Stream<span class="logo-dot">Grab</span></span>
+      <span class="ft-tagline">حمِّل بحرية، استخدم بمسؤولية</span>
+    </div>
+    <div class="ft-links">
+      <button onclick="showPage('about')">عن التطبيق</button>
+      <button onclick="showPage('help')">المساعدة</button>
+      <button onclick="showPage('settings')">الإعدادات</button>
+    </div>
+  </div>
+  <div class="ft-bottom">
+    <span id="footerCopy"></span>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(reg => console.log('SW registered:', reg.scope))
+        .catch(err => console.log('SW error:', err));
+    });
+  }
+</script>
+</body>
+</html>
