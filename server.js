@@ -312,6 +312,50 @@ app.get('/get-file', (req, res) => {
   });
 });
 
+// ── Debug Threads HTML ──────────────────────────────────────────────────────
+app.get('/debug-threads-html', async (req, res) => {
+  const shortcode = req.query.code || 'DWC549LAFPP';
+  const https = require('https');
+  
+  function get(url) {
+    return new Promise((resolve, reject) => {
+      const req2 = https.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'text/html',
+        }
+      }, (r) => {
+        const chunks = [];
+        r.on('data', d => chunks.push(d));
+        r.on('end', () => resolve({ status: r.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+      });
+      req2.on('error', reject);
+    });
+  }
+  
+  try {
+    const r = await get(`https://www.threads.net/@x/post/${shortcode}/embed`);
+    const html = r.body;
+    
+    // ابحث عن keywords
+    const found = {};
+    ['video_url','mp4','fbcdn','cdninstagram','scontent','playback','VideoObject','contentUrl'].forEach(k => {
+      const idx = html.indexOf(k);
+      if (idx !== -1) found[k] = html.slice(Math.max(0,idx-10), idx+200);
+    });
+    
+    // أول 1000 char
+    res.json({
+      status: r.status,
+      length: html.length,
+      first500: html.slice(0, 500),
+      keywordsFound: found,
+    });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Debug Threads (مؤقت) ──────────────────────────────────────────────────
 app.get('/debug-threads', async (req, res) => {
   const { url } = req.query;
