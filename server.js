@@ -35,6 +35,7 @@ const ALLOWED_DOMAINS = [
   'tiktok.com',
   'instagram.com',
   'threads.net',
+  'threads.com',
   'facebook.com','fb.watch',
   'twitter.com','x.com','t.co',
   'vimeo.com',
