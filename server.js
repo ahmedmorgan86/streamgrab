@@ -83,7 +83,7 @@ function isAllowedUrl(rawUrl) {
 }
 
 function sanitizeFilename(name) {
-  return String(name || 'media').replace(/[^a-z0-9_\-\u0600-\u06FF]/gi, '_').slice(0, 120);
+  return String(name || 'media').replace(/[^a-z0-9_\-.\u0600-\u06FF]/gi, '_').slice(0, 120);
 }
 
 function isSafeTmpPath(filePath) {
