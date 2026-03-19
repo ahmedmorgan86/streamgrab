@@ -103,7 +103,12 @@ app.get('/info', async (req, res) => {
       const threadsData = await getThreadsInfo(url);
       return res.json(threadsData);
     } catch (err) {
-      return res.status(500).json({ error: 'فشل تحميل الرابط من Threads', detail: err.message });
+      console.error('[Threads Error]', err.message, err.stack);
+      return res.status(500).json({
+        error: 'فشل تحميل الرابط من Threads',
+        detail: err.message,
+        hint: 'تأكد أن الرابط صح وأن الـ post مش private'
+      });
     }
   }
 
