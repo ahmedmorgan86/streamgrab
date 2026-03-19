@@ -1,4 +1,4 @@
-// ── Threads Handler v5 — Anti-429 ──────────────────────────────────────
+// ── Threads Handler v6 — scontent CDN ──────────────────────────────────
 // Ahmed Morgan - StreamGrab
 const https = require('https');
 const { exec } = require('child_process');
@@ -17,27 +17,21 @@ function shortcodeToId(shortcode) {
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-  'Mozilla/5.0 (Linux; Android 14; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
 ];
+const sleep  = ms => new Promise(r => setTimeout(r, ms));
+const randUA = ()  => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-function randomUA() {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
-
-function httpsGet(url, headers = {}, redirectCount = 0) {
+function httpsGet(url, headers = {}, redirects = 0) {
   return new Promise((resolve, reject) => {
-    if (redirectCount > 5) return reject(new Error('Too many redirects'));
+    if (redirects > 5) return reject(new Error('Too many redirects'));
     const req = https.get(url, { headers }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         const next = res.headers.location.startsWith('http')
           ? res.headers.location
           : new URL(res.headers.location, url).href;
-        return resolve(httpsGet(next, headers, redirectCount + 1));
+        return resolve(httpsGet(next, headers, redirects + 1));
       }
       const chunks = [];
       res.on('data', d => chunks.push(d));
@@ -48,83 +42,99 @@ function httpsGet(url, headers = {}, redirectCount = 0) {
   });
 }
 
-// استخرج الـ video URLs من HTML
 function extractVideoUrls(html) {
   const urls = new Set();
-  const patterns = [
-    /["']?(https:\/\/[^"'\s<>]+\.mp4[^"'\s<>]*)/g,
-    /"video_url":"(https:\\\/\\\/[^"]+)"/g,
-    /"playback_url":"(https:\\\/\\\/[^"]+)"/g,
-    /contentUrl["\s:]+["'](https:[^"']+\.mp4[^"']*)/gi,
-    /"src":"(https:\\\/\\\/[^"]+video[^"]+)"/g,
+
+  // scontent CDN - الـ pattern الحقيقي من الـ HTML بتاع Threads
+  const regexes = [
+    /"(https:\/\/scontent[^"]+\.mp4[^"]*)"/g,
+    /'(https:\/\/scontent[^']+\.mp4[^']*)'/g,
+    /src="(https:\/\/scontent[^"]+\.mp4[^"]*)"/g,
+    /src='(https:\/\/scontent[^']+\.mp4[^']*)'/g,
+    /"(https:\/\/[^"]*cdninstagram\.com[^"]*\.mp4[^"]*)"/g,
+    /"(https:\/\/[^"]*\.fbcdn\.net[^"]*\.mp4[^"]*)"/g,
+    /"video_url":"(https:\/\/[^"]+)"/g,
+    /"playback_url":"(https:\/\/[^"]+)"/g,
   ];
-  for (const pat of patterns) {
-    for (const m of html.matchAll(pat)) {
-      const u = (m[1] || m[0])
-        .replace(/\\u0026/g, '&')
-        .replace(/\\\//g, '/')
-        .replace(/\\/g, '')
-        .replace(/&amp;/g, '&');
-      if (u.startsWith('https://') && u.length > 30) urls.add(u);
+
+  for (const re of regexes) {
+    for (const m of html.matchAll(re)) {
+      let u = m[1];
+      // unescape
+      u = u.replace(/&amp;/g, '&').replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+      if (u && u.startsWith('https://') && u.length > 60) {
+        urls.add(u);
+      }
     }
   }
+
   // JSON-LD
   for (const m of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
     try {
       const j = JSON.parse(m[1]);
-      [j.contentUrl, j.video?.contentUrl, j.video?.url].filter(Boolean).forEach(u => urls.add(u));
+      [j.contentUrl, j?.video?.contentUrl, j?.video?.url]
+        .filter(Boolean).forEach(u => urls.add(u));
     } catch {}
   }
+
   // og:video
   const ogV = html.match(/<meta[^>]+property="og:video(?::url)?"[^>]+content="([^"]+)"/);
   if (ogV) urls.add(ogV[1].replace(/&amp;/g, '&'));
 
-  return [...urls].filter(u => u.includes('.mp4') || u.includes('/video/') || u.includes('video_dashinit'));
+  return [...urls].filter(u =>
+    u.includes('.mp4') &&
+    !u.includes('.css') &&
+    !u.includes('.js') &&
+    u.length > 60
+  );
 }
 
-// Strategy 1: Embed مع retry وUA rotation
 async function tryEmbed(shortcode, attempt = 0) {
-  const urls = [
+  const embedUrls = [
     `https://www.threads.net/@x/post/${shortcode}/embed`,
     `https://www.threads.com/@x/post/${shortcode}/embed`,
-    `https://www.threads.net/t/${shortcode}/embed`,
   ];
-  const url = urls[attempt % urls.length];
+  const url = embedUrls[attempt % embedUrls.length];
 
-  if (attempt > 0) await sleep(1500 * attempt); // delay متزايد
+  if (attempt > 0) await sleep(2000 * attempt);
 
   const res = await httpsGet(url, {
-    'User-Agent': randomUA(),
-    'Accept': 'text/html,application/xhtml+xml',
+    'User-Agent': randUA(),
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Cache-Control': 'no-cache',
-    'Pragma': 'no-cache',
     'Referer': 'https://www.threads.net/',
+    'Cache-Control': 'no-cache',
   });
 
   if (res.status === 429 && attempt < 3) {
     await sleep(3000 * (attempt + 1));
     return tryEmbed(shortcode, attempt + 1);
   }
+
   if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
 
   const videoUrls = extractVideoUrls(res.body);
-  const title   = (res.body.match(/<meta[^>]+property="og:description"[^>]+content="([^"]*)"/) || [])[1]?.replace(/&amp;/g,'&').replace(/&#39;/g,"'") || 'Threads Video';
-  const thumb   = (res.body.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/) || [])[1]?.replace(/&amp;/g,'&') || '';
-  const author  = (res.body.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/) || [])[1]?.replace(/ on Threads$/,'') || '';
+
+  const title = (
+    res.body.match(/<meta[^>]+property="og:description"[^>]+content="([^"]*)"/) ||
+    res.body.match(/<meta[^>]+name="description"[^>]+content="([^"]*)"/)
+  )?.[1]?.replace(/&amp;/g, '&').replace(/&#39;/g, "'") || 'Threads Video';
+
+  const thumbnail = res.body.match(
+    /<meta[^>]+property="og:image"[^>]+content="([^"]+)"/
+  )?.[1]?.replace(/&amp;/g, '&') || '';
+
+  const uploader = res.body.match(
+    /<meta[^>]+property="og:title"[^>]+content="([^"]+)"/
+  )?.[1]?.replace(/ on Threads$/, '') || '';
 
   if (videoUrls.length === 0) {
-    // شوف لو post صورة
-    if (!res.body.includes('video') && !res.body.includes('.mp4')) {
-      throw new Error('هذا المنشور لا يحتوي على فيديو (صورة أو نص)');
-    }
-    throw new Error(`لم يتم العثور على رابط الفيديو (HTML: ${res.body.length} chars)`);
+    throw new Error(`لم يتم العثور على رابط الفيديو في HTML (${res.body.length} chars)`);
   }
 
-  return { videoUrls, title, thumbnail: thumb, uploader: author };
+  return { videoUrls, title, thumbnail, uploader };
 }
 
-// Strategy 2: yt-dlp مع cookies
 function tryYtDlp(url) {
   return new Promise((resolve, reject) => {
     const cookiesEnv = process.env.THREADS_COOKIES || process.env.IG_COOKIES;
@@ -134,24 +144,26 @@ function tryYtDlp(url) {
     if (cookiesEnv) {
       tmpFile = path.join(os.tmpdir(), `ig_${Date.now()}.txt`);
       try {
-        fs.writeFileSync(tmpFile, cookiesEnv.startsWith('# Netscape') ? cookiesEnv : '# Netscape HTTP Cookie File\n' + cookiesEnv);
+        fs.writeFileSync(
+          tmpFile,
+          cookiesEnv.startsWith('# Netscape') ? cookiesEnv : '# Netscape HTTP Cookie File\n' + cookiesEnv
+        );
         cookiesFlag = `--cookies "${tmpFile}"`;
       } catch {}
     }
 
     const cmd = [
       'yt-dlp --dump-json --no-playlist --no-check-certificates',
-      `--user-agent "${randomUA()}"`,
+      `--user-agent "${randUA()}"`,
       '--add-header "Referer:https://www.threads.com/"',
       '--add-header "Accept-Language:en-US,en;q=0.9"',
-      '--sleep-requests 1',
       cookiesFlag,
       JSON.stringify(url),
     ].filter(Boolean).join(' ');
 
     exec(cmd, { maxBuffer: 5 * 1024 * 1024, timeout: 35000 }, (err, stdout, stderr) => {
       if (tmpFile) try { fs.unlinkSync(tmpFile); } catch {}
-      if (err) return reject(new Error('yt-dlp: ' + stderr.replace(/WARNING[^\n]*/g,'').trim().slice(0,200)));
+      if (err) return reject(new Error('yt-dlp: ' + stderr.replace(/WARNING[^\n]*/g, '').trim().slice(0, 200)));
       try { resolve(JSON.parse(stdout)); }
       catch { reject(new Error('yt-dlp: invalid JSON')); }
     });
@@ -165,18 +177,22 @@ async function getThreadsInfo(url) {
   const mediaId   = shortcodeToId(shortcode);
   const errors    = [];
 
-  // Strategy 1: Embed scraping مع retry
+  // Strategy 1: Embed scraping
   try {
     const { videoUrls, title, thumbnail, uploader } = await tryEmbed(shortcode);
     const formats = videoUrls.map((u, i) => ({
-      format_id:  String(i),
-      ext:        'mp4',
-      resolution: i === 0 ? '1080x1920' : '720x1280',
-      height:     i === 0 ? 1080 : 720,
-      width:      i === 0 ? 608  : 405,
-      filesize:   null, vcodec: 'avc1', acodec: 'mp4a',
-      tbr:        null, fps: 30, type: 'video', url: u,
-      _directUrl: u,
+      format_id:   String(i),
+      ext:         'mp4',
+      resolution:  i === 0 ? '1080x1920' : '720x1280',
+      height:      i === 0 ? 1080 : 720,
+      width:       i === 0 ? 608  : 405,
+      filesize:    null,
+      vcodec:      'avc1',
+      acodec:      'mp4a',
+      tbr:         null,
+      fps:         30,
+      type:        'video',
+      _directUrl:  u,
     }));
     return { id: mediaId, title, thumbnail, duration: null, uploader, view_count: null, upload_date: '', formats };
   } catch (e) { errors.push('Embed: ' + e.message); }
@@ -187,13 +203,17 @@ async function getThreadsInfo(url) {
     const formats = (data.formats || [])
       .filter(f => f.ext && (f.vcodec !== 'none' || f.acodec !== 'none'))
       .map(f => ({
-        format_id: f.format_id, ext: f.ext,
+        format_id:  f.format_id,
+        ext:        f.ext,
         resolution: f.resolution || (f.height ? `${f.width}x${f.height}` : 'audio only'),
-        fps: f.fps || null, filesize: f.filesize || null,
-        vcodec: f.vcodec, acodec: f.acodec,
-        tbr: f.tbr || null, abr: f.abr || null,
-        height: f.height || null,
-        type: f.vcodec === 'none' ? 'audio' : 'video',
+        fps:        f.fps     || null,
+        filesize:   f.filesize || null,
+        vcodec:     f.vcodec,
+        acodec:     f.acodec,
+        tbr:        f.tbr  || null,
+        abr:        f.abr  || null,
+        height:     f.height || null,
+        type:       f.vcodec === 'none' ? 'audio' : 'video',
         _directUrl: f.url || null,
       })).sort((a, b) => (b.tbr || 0) - (a.tbr || 0));
     return {
