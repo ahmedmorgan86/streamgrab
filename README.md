@@ -85,3 +85,27 @@ streamgrab/
 * الملفات تُحذف تلقائياً بعد 5 دقائق من اكتمال التحميل
 * بعض المواقع (Netflix, Disney+) محمية بـ DRM ولا يمكن تحميلها
 * استخدم الأداة بشكل قانوني فقط
+
+## إعداد Threads (مطلوب لتحميل فيديوهات Threads)
+
+Threads يتطلب cookies من حساب Instagram مسجّل الدخول.
+
+### الخطوات:
+
+**1. تثبيت امتداد المتصفح:**
+- Chrome: [Cookie-Editor](https://chrome.google.com/webstore/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)
+
+**2. تصدير الـ Cookies:**
+- افتح [instagram.com](https://www.instagram.com) وتأكد إنك مسجّل دخول
+- افتح Cookie-Editor → Export → Netscape format
+- انسخ المحتوى كله
+
+**3. إضافة على Railway:**
+- افتح مشروعك على Railway → Variables
+- أضف متغير جديد:
+  - Name: `THREADS_COOKIES`
+  - Value: المحتوى المنسوخ من Cookie-Editor
+
+**4. Redeploy** — وهيشتغل Threads تلقائياً ✅
+
+> ⚠️ استخدم حساب Instagram ثانوي للأمان

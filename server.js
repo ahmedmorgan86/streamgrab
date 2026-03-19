@@ -104,10 +104,13 @@ app.get('/info', async (req, res) => {
       return res.json(threadsData);
     } catch (err) {
       console.error('[Threads Error]', err.message, err.stack);
+      const needsCookies = err.message.includes('THREADS_COOKIES');
       return res.status(500).json({
-        error: 'فشل تحميل الرابط من Threads',
+        error: needsCookies
+          ? 'Threads يحتاج إعداد Cookies على السيرفر'
+          : 'فشل تحميل الرابط من Threads',
         detail: err.message,
-        hint: 'تأكد أن الرابط صح وأن الـ post مش private'
+        needsCookies,
       });
     }
   }
