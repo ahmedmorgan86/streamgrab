@@ -280,6 +280,19 @@ app.get('/get-file', (req, res) => {
   });
 });
 
+// ── Debug Threads (مؤقت) ──────────────────────────────────────────────────
+app.get('/debug-threads', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.json({ error: 'url required' });
+  try {
+    const { getThreadsInfo } = require('./threads_handler');
+    const data = await getThreadsInfo(url);
+    res.json({ ok: true, title: data.title, formatsCount: data.formats.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack?.split('\n').slice(0,5) });
+  }
+});
+
 // ── Health ─────────────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
 
